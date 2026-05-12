@@ -4,3 +4,6 @@ google-api-python-client
 yt-dlp
 opencv-python-headless
 easyocr
+ntscraper
+gspread
+google-auth
