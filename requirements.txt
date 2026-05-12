@@ -1,0 +1,6 @@
+telethon
+requests
+google-api-python-client
+yt-dlp
+opencv-python-headless
+easyocr
