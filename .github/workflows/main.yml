@@ -1,0 +1,32 @@
+name: Continuous Red Packet Bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          sudo apt-get install -y libgl1-mesa-glx
+
+      - name: Run Bot
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_STRING_SESSION: ${{ secrets.TG_STRING_SESSION }}
+          MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GOOGLE_SHEETS_JSON: ${{ secrets.GOOGLE_SHEETS_JSON }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+        run: python bot.py
