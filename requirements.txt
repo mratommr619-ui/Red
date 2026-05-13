@@ -1,9 +1,8 @@
 telethon
 requests
-google-api-python-client
-yt-dlp
-opencv-python-headless
-easyocr
-ntscraper
 gspread
 google-auth
+opencv-python-headless
+easyocr
+yt-dlp
+ntscraper
