@@ -1,33 +1,27 @@
 name: Red Packet Bot
-
 on:
-  workflow_dispatch:        # Manual run ရန်
-  repository_dispatch:      # Bot ကနေ လှမ်းနှိုးရင် run ရန် (Restart Logic)
+  workflow_dispatch:
+  repository_dispatch:
     types: [restart_bot]
-
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-
-      - name: Install Dependencies
+      - name: Install
         run: |
           pip install -r requirements.txt
           sudo apt-get update
           sudo apt-get install -y libgl1 libglib2.0-0
-
-      - name: Run Scraper
+      - name: Run
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           TG_STRING_SESSION: ${{ secrets.TG_STRING_SESSION }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
           GOOGLE_SHEETS_JSON: ${{ secrets.GOOGLE_SHEETS_JSON }}
