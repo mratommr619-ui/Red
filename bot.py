@@ -14,7 +14,7 @@ from telethon.sessions import StringSession
 from google.oauth2.service_account import Credentials
 from ntscraper import Nitter
 
-# --- Config ---
+# --- Global Config ---
 START_TIME = time.time()
 MAX_RUN_TIME = 19800 
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
@@ -37,24 +37,22 @@ def find_binance_code(text):
     return [c for c in found if c not in BLACKLIST and any(char.isdigit() for char in c)]
 
 async def scan_video_content(video_url):
-    print(f"📥 Scanning: {video_url}")
+    print(f"📥 Scanning Video: {video_url}")
     video_file = "temp_video.mp4"
     codes_found = set()
     
-    # YouTube က Bot မှန်းမသိအောင် အပြင်းထန်ဆုံး Bypass Flags များ
     ydl_opts = {
-        'format': 'worst', 
+        'format': 'bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best',
         'outtmpl': video_file, 
         'quiet': True, 
         'no_warnings': True,
         'cookiefile': 'cookies.txt',
-        'nocheckcertificate': True,
         'ignoreerrors': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],
-                'player_skip': ['web_safari_mac']
-            }
+        'nocheckcertificate': True,
+        # Bot detection ကျော်ဖို့ အပိုဆောင်း Flags များ
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
         }
     }
     
@@ -62,14 +60,12 @@ async def scan_video_content(video_url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
         
-        if not os.path.exists(video_file):
-            print("❌ Download failed even with cookies.")
-            return codes_found
+        if not os.path.exists(video_file): return codes_found
 
         cap = cv2.VideoCapture(video_file)
         fps = cap.get(cv2.CAP_PROP_FPS) or 24
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        interval = int(fps * 5)
+        interval = int(fps * 2) 
         
         for frame_no in range(0, total_frames, interval):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
@@ -81,7 +77,7 @@ async def scan_video_content(video_url):
                     codes_found.add(c)
         cap.release()
     except Exception as e:
-        print(f"⚠️ Scan Error: {e}")
+        print(f"⚠️ Video Scan Error: {e}")
     finally:
         if os.path.exists(video_file): os.remove(video_file)
             
@@ -100,7 +96,7 @@ async def main():
 
     await user_client.start()
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v3.3 (Ultimate Bypass) Started!")
+    print("🚀 Bot v3.6 (Guest Cookie Mode) Started!")
 
     while True:
         if time.time() - START_TIME > MAX_RUN_TIME:
@@ -122,23 +118,24 @@ async def main():
                     found_codes = await scan_video_content(entry.link)
                     if found_codes:
                         for c in found_codes:
-                            await bot_client.send_message(MY_CHAT_ID, f"🎁 **Found Inside Video:** `{c}`\n🔗 {entry.link}")
+                            await bot_client.send_message(MY_CHAT_ID, f"🎁 **Inside Video:** `{c}`\n🔗 {entry.link}")
                     
                     PROCESSED_VIDEOS.add(v_id)
             except: pass
 
-        # X Section
+        # X Section (Fixed Error Handling)
         x_links = [r['Link'] for r in records if r['Type'].upper() == 'X']
         if x_links:
-            scraper = Nitter()
-            for link in x_links:
-                try:
+            try:
+                scraper = Nitter()
+                for link in x_links:
                     user = link.strip().split('/')[-1]
                     tweets = scraper.get_tweets(user, mode='user', number=2)
-                    for t in tweets['tweets']:
-                        for c in find_binance_code(t['text']):
-                            await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: {user}")
-                except: pass
+                    if 'tweets' in tweets:
+                        for t in tweets['tweets']:
+                            for c in find_binance_code(t['text']):
+                                await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: {user}")
+            except: pass
 
         await asyncio.sleep(600)
 
