@@ -4,5 +4,5 @@ gspread
 google-auth
 opencv-python-headless
 easyocr
-yt-dlp
+feedparser
 ntscraper
