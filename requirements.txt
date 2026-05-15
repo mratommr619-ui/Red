@@ -2,8 +2,6 @@ telethon
 requests
 gspread
 google-auth
+ntscraper
 opencv-python-headless
 easyocr
-feedparser
-ntscraper
-yt-dlp
