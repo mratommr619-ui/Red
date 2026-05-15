@@ -1,34 +1,26 @@
-name: Red Packet Bot (X and TG Version)
+name: Red Packet Bot v5.1 (Direct X)
 
 on:
   workflow_dispatch:
   repository_dispatch:
     types: [restart_bot]
-  schedule:
-    - cron: '0 */6 * * *' # ၆ နာရီတစ်ခါ အလိုအလျောက် ပြန်ပွင့်ရန်
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-          
-      - name: Install System Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1 libglib2.0-0
-          
-      - name: Install Python Dependencies
-        run: |
           pip install --upgrade pip
-          pip install telethon requests gspread google-auth opencv-python-headless easyocr feedparser ntscraper
-          
-      - name: Run Red Packet Bot
+          pip install telethon requests gspread google-auth opencv-python-headless easyocr twikit
+      - name: Run Bot
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
@@ -36,6 +28,8 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           GOOGLE_SHEETS_JSON: ${{ secrets.GOOGLE_SHEETS_JSON }}
+          # မိတ်ဆွေပေးထားတဲ့ Secret နာမည်တွေအတိုင်း ပြင်ထားပါတယ်
+          X_AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+          X_CT0: ${{ secrets.CT0 }}
         run: python bot.py
