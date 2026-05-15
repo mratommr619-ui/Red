@@ -1,22 +1,33 @@
-name: Red Packet Bot
+name: Red Packet Bot Professional
+
 on:
   workflow_dispatch:
   repository_dispatch:
     types: [restart_bot]
+  schedule:
+    - cron: '0 */6 * * *' # အကယ်၍ ရပ်သွားခဲ့ရင် ၆ နာရီတစ်ခါ အလိုအလျောက် ပြန်ပွင့်ရန်
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - name: Install
+          
+      - name: Install System Dependencies
         run: |
-          pip install -r requirements.txt
           sudo apt-get update
           sudo apt-get install -y libgl1 libglib2.0-0
-      - name: Run
+          
+      - name: Install Python Dependencies
+        run: |
+          pip install telethon requests gspread google-oauth2-service-account easyocr opencv-python-headless feedparser ntscraper
+          
+      - name: Run Red Packet Bot
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
@@ -24,6 +35,6 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           GOOGLE_SHEETS_JSON: ${{ secrets.GOOGLE_SHEETS_JSON }}
-          YT_API_KEY: ${{ secrets.YT_API_KEY }}
         run: python bot.py
