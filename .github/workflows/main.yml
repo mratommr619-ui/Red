@@ -1,11 +1,11 @@
-name: Red Packet Bot Professional
+name: Red Packet Bot Pro
 
 on:
   workflow_dispatch:
   repository_dispatch:
     types: [restart_bot]
   schedule:
-    - cron: '0 */6 * * *' # အကယ်၍ ရပ်သွားခဲ့ရင် ၆ နာရီတစ်ခါ အလိုအလျောက် ပြန်ပွင့်ရန်
+    - cron: '0 */6 * * *'
 
 jobs:
   run-bot:
@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
@@ -25,7 +25,8 @@ jobs:
           
       - name: Install Python Dependencies
         run: |
-          pip install telethon requests gspread google-oauth2-service-account easyocr opencv-python-headless feedparser ntscraper
+          pip install --upgrade pip
+          pip install -r requirements.txt
           
       - name: Run Red Packet Bot
         env:
