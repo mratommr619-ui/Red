@@ -14,7 +14,7 @@ from telethon.sessions import StringSession
 from google.oauth2.service_account import Credentials
 from ntscraper import Nitter
 
-# --- Global Config ---
+# --- Config ---
 START_TIME = time.time()
 MAX_RUN_TIME = 19800 
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
@@ -41,26 +41,31 @@ async def scan_video_content(video_url):
     video_file = "temp_video.mp4"
     codes_found = set()
     
+    # Cookie ဖိုင် ရှိ/မရှိ စစ်ဆေးခြင်း
+    cookie_path = 'cookies.txt'
+    has_cookies = os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 10
+
     ydl_opts = {
         'format': 'bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best',
         'outtmpl': video_file, 
         'quiet': True, 
         'no_warnings': True,
-        'cookiefile': 'cookies.txt',
         'ignoreerrors': True,
         'nocheckcertificate': True,
-        # Bot detection ကျော်ဖို့ အပိုဆောင်း Flags များ
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-        }
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
     }
+
+    # Cookie ဖိုင်ရှိမှသာ option ထဲ ထည့်သုံးမည်
+    if has_cookies:
+        ydl_opts['cookiefile'] = cookie_path
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
         
-        if not os.path.exists(video_file): return codes_found
+        if not os.path.exists(video_file):
+            print("❌ Download Failed. Skipping this video.")
+            return codes_found
 
         cap = cv2.VideoCapture(video_file)
         fps = cap.get(cv2.CAP_PROP_FPS) or 24
@@ -75,9 +80,11 @@ async def scan_video_content(video_url):
             for (_, text, _) in results:
                 for c in find_binance_code(text):
                     codes_found.add(c)
+                    print(f"✨ Found Code: {c}")
+                    
         cap.release()
     except Exception as e:
-        print(f"⚠️ Video Scan Error: {e}")
+        print(f"⚠️ Scan Error: {e}")
     finally:
         if os.path.exists(video_file): os.remove(video_file)
             
@@ -96,7 +103,7 @@ async def main():
 
     await user_client.start()
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v3.6 (Guest Cookie Mode) Started!")
+    print("🚀 Bot v3.7 (Stable Scan Mode) Started!")
 
     while True:
         if time.time() - START_TIME > MAX_RUN_TIME:
@@ -106,7 +113,6 @@ async def main():
         if not sheet: await asyncio.sleep(60); continue
         records = sheet.get_all_records()
 
-        # YouTube Section
         yt_links = [r['Link'] for r in records if r['Type'].upper() == 'YT']
         for rss_url in yt_links:
             try:
@@ -123,7 +129,7 @@ async def main():
                     PROCESSED_VIDEOS.add(v_id)
             except: pass
 
-        # X Section (Fixed Error Handling)
+        # X Section
         x_links = [r['Link'] for r in records if r['Type'].upper() == 'X']
         if x_links:
             try:
