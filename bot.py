@@ -1,7 +1,6 @@
 import time
 import os
 import re
-import requests
 import json
 import gspread
 import asyncio
@@ -9,35 +8,21 @@ import easyocr
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from google.oauth2.service_account import Credentials
-from ntscraper import Nitter
+from twikit import Client
 
 # --- Config ---
 START_TIME = time.time()
 MAX_RUN_TIME = 19800 
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
 READER = easyocr.Reader(['en'], gpu=False) 
-
-BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW", "FOLLOWED", "MESSAGES", "CRYPTOBOX", "MARKETING"]
 SENT_CODES = set()
-
-NITTER_INSTANCES = [
-    "https://nitter.net", "https://nitter.cz", "https://nitter.privacydev.net",
-    "https://nitter.it", "https://nitter.no-logs.com", "https://nitter.perennialte.ch",
-    "https://nitter.pw", "https://nitter.rawbit.ninja", "https://nitter.tokhmi.xyz",
-    "https://nitter.unixfox.eu", "https://nitter.v0l.me", "https://nitter.bird.froth.zone",
-    "https://nitter.sethforprivacy.com", "https://nitter.cutelab.space", "https://nitter.moomoo.me"
-]
+BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW"]
 
 def find_binance_code(text):
     if not text: return []
-    # --- ပိုလျှော့ထားတဲ့ Regex: ၈ လုံးကနေ ၁၀ လုံးကြား စာလုံး/ဂဏန်း အကုန်ယူမယ် ---
+    # ၈ လုံးကနေ ၁၀ လုံးကြား code တွေကို ရှာမယ်
     found = re.findall(r'\b[A-Z0-9]{8,10}\b', text.upper())
-    valid_codes = []
-    for c in found:
-        if c in BLACKLIST: continue
-        # စာလုံးသက်သက်ပဲဖြစ်ဖြစ်၊ ဂဏန်းရောရော အကုန်ယူမယ် (မလွတ်အောင်လို့ပါ)
-        valid_codes.append(c)
-    return valid_codes
+    return [c for c in found if c not in BLACKLIST]
 
 def get_sheet():
     try:
@@ -61,16 +46,29 @@ async def process_tg_message(event, bot_client, label):
         if c not in SENT_CODES:
             await bot_client.send_message(MY_CHAT_ID, f"🎁 **TG Code:** `{c}`\n🔗 From: @{label}")
             SENT_CODES.add(c)
+            print(f"✨ Found on TG: {c}")
 
 async def main():
+    # --- X Client Setup ---
+    x_client = Client('en-US')
+    try:
+        x_client.set_cookies({
+            'auth_token': os.getenv("X_AUTH_TOKEN"),
+            'ct0': os.getenv("X_CT0")
+        })
+        print("✅ X Cookie Loaded Successfully!")
+    except Exception as e:
+        print(f"❌ X Cookie Error: {e}")
+
     user_client = TelegramClient(StringSession(os.getenv("TG_STRING_SESSION")), 
                                  int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
     bot_client = TelegramClient('bot', int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
 
     await user_client.start()
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v4.2 (X Debug Mode) Online!")
+    print("🚀 Bot v5.1 (X Direct Edition) is Online!")
 
+    # Google Sheet data ယူခြင်း
     sheet = get_sheet()
     tg_list = []
     if sheet:
@@ -78,6 +76,7 @@ async def main():
         tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
                    for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
+    # Telegram စောင့်ကြည့်ခြင်း
     @user_client.on(events.NewMessage())
     async def handler(event):
         try:
@@ -87,7 +86,7 @@ async def main():
                 await process_tg_message(event, bot_client, username)
         except: pass
 
-    scraper = Nitter()
+    # X Monitoring Loop
     while True:
         if time.time() - START_TIME > MAX_RUN_TIME: break
         
@@ -99,31 +98,23 @@ async def main():
         if x_links:
             print(f"🐦 Checking {len(x_links)} X Accounts...")
             for link in x_links:
-                user = link.strip().split('/')[-1].split('?')[0]
-                success = False
-                for instance in NITTER_INSTANCES:
-                    try:
-                        scraper.instance = instance
-                        tweets = scraper.get_tweets(user, mode='user', number=3)
-                        if tweets and 'tweets' in tweets:
-                            for t in tweets['tweets']:
-                                # Debug: စာဖတ်မိလား သိအောင် Tweet ထဲက စာသားအချို့ကို ပြမယ်
-                                clean_text = t['text'].replace('\n', ' ')[:50]
-                                print(f"📖 Reading @{user}: {clean_text}...")
-                                
-                                for c in find_binance_code(t['text']):
-                                    if c not in SENT_CODES:
-                                        await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{user}")
-                                        SENT_CODES.add(c)
-                            success = True
-                            break
-                    except: continue
-                
-                if not success:
-                    print(f"⚠️ Could not reach @{user} (All instances failed)")
+                try:
+                    username = link.strip().split('/')[-1].split('?')[0]
+                    user = await x_client.get_user_by_screen_name(username)
+                    tweets = await user.get_tweets('Tweets', count=3)
+                    
+                    for t in tweets:
+                        codes = find_binance_code(t.text)
+                        for c in set(codes):
+                            if c not in SENT_CODES:
+                                await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{username}")
+                                SENT_CODES.add(c)
+                                print(f"✨ Found on X: {c}")
+                except Exception as e:
+                    print(f"⚠️ Error checking @{username}: {e}")
 
-        print("😴 Waiting 10 mins...")
-        await asyncio.sleep(600)
+        print("😴 Waiting 5 mins...")
+        await asyncio.sleep(300)
 
 if __name__ == "__main__":
     asyncio.run(main())
