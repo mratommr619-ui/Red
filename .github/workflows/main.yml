@@ -1,11 +1,9 @@
-name: Red Packet Bot Pro Max
+name: Red Packet Bot Ultimate
 
 on:
   workflow_dispatch:
   repository_dispatch:
     types: [restart_bot]
-  schedule:
-    - cron: '0 */6 * * *'
 
 jobs:
   run-bot:
@@ -26,8 +24,15 @@ jobs:
       - name: Install Python Dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install telethon requests gspread google-auth opencv-python-headless easyocr feedparser ntscraper yt-dlp
           
+      - name: Create Cookie File
+        # စာကြောင်းအပိုတွေနဲ့ Format မပျက်အောင် Cat နဲ့ ဖန်တီးခိုင်းလိုက်ပါတယ်
+        run: |
+          cat <<EOF > cookies.txt
+          ${{ secrets.YT_COOKIES }}
+          EOF
+
       - name: Run Red Packet Bot
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
