@@ -17,26 +17,26 @@ MAX_RUN_TIME = 19800
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
 READER = easyocr.Reader(['en'], gpu=False) 
 
-BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW", "FOLLOWED", "MESSAGES", "CRYPTOBOX"]
+BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW", "FOLLOWED", "MESSAGES", "CRYPTOBOX", "MARKETING"]
 SENT_CODES = set()
 
-# လောလောဆယ် အလုပ်ဖြစ်နိုင်ချေရှိသော Nitter Instances များ
 NITTER_INSTANCES = [
     "https://nitter.net", "https://nitter.cz", "https://nitter.privacydev.net",
     "https://nitter.it", "https://nitter.no-logs.com", "https://nitter.perennialte.ch",
     "https://nitter.pw", "https://nitter.rawbit.ninja", "https://nitter.tokhmi.xyz",
-    "https://nitter.unixfox.eu", "https://nitter.v0l.me", "https://nitter.bird.froth.zone"
+    "https://nitter.unixfox.eu", "https://nitter.v0l.me", "https://nitter.bird.froth.zone",
+    "https://nitter.sethforprivacy.com", "https://nitter.cutelab.space", "https://nitter.moomoo.me"
 ]
 
 def find_binance_code(text):
     if not text: return []
+    # --- ပိုလျှော့ထားတဲ့ Regex: ၈ လုံးကနေ ၁၀ လုံးကြား စာလုံး/ဂဏန်း အကုန်ယူမယ် ---
     found = re.findall(r'\b[A-Z0-9]{8,10}\b', text.upper())
     valid_codes = []
     for c in found:
         if c in BLACKLIST: continue
-        if any(char.isdigit() for char in c):
-            if not c.isalpha(): 
-                valid_codes.append(c)
+        # စာလုံးသက်သက်ပဲဖြစ်ဖြစ်၊ ဂဏန်းရောရော အကုန်ယူမယ် (မလွတ်အောင်လို့ပါ)
+        valid_codes.append(c)
     return valid_codes
 
 def get_sheet():
@@ -59,7 +59,7 @@ async def process_tg_message(event, bot_client, label):
         except: pass
     for c in set(codes):
         if c not in SENT_CODES:
-            await bot_client.send_message(MY_CHAT_ID, f"🎁 **Found Code:** `{c}`\n🔗 From: @{label}")
+            await bot_client.send_message(MY_CHAT_ID, f"🎁 **TG Code:** `{c}`\n🔗 From: @{label}")
             SENT_CODES.add(c)
 
 async def main():
@@ -69,9 +69,8 @@ async def main():
 
     await user_client.start()
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v4.1 (X Scraper Re-Fixed) Online!")
+    print("🚀 Bot v4.2 (X Debug Mode) Online!")
 
-    # Sheet Initial Load
     sheet = get_sheet()
     tg_list = []
     if sheet:
@@ -88,7 +87,6 @@ async def main():
                 await process_tg_message(event, bot_client, username)
         except: pass
 
-    # Scraper Loop
     scraper = Nitter()
     while True:
         if time.time() - START_TIME > MAX_RUN_TIME: break
@@ -103,24 +101,26 @@ async def main():
             for link in x_links:
                 user = link.strip().split('/')[-1].split('?')[0]
                 success = False
-                # အလုပ်လုပ်တဲ့ Instance ကိုတွေ့တဲ့အထိ စမ်းမယ်
                 for instance in NITTER_INSTANCES:
                     try:
                         scraper.instance = instance
                         tweets = scraper.get_tweets(user, mode='user', number=3)
                         if tweets and 'tweets' in tweets:
                             for t in tweets['tweets']:
+                                # Debug: စာဖတ်မိလား သိအောင် Tweet ထဲက စာသားအချို့ကို ပြမယ်
+                                clean_text = t['text'].replace('\n', ' ')[:50]
+                                print(f"📖 Reading @{user}: {clean_text}...")
+                                
                                 for c in find_binance_code(t['text']):
                                     if c not in SENT_CODES:
-                                        await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: {user}")
+                                        await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{user}")
                                         SENT_CODES.add(c)
                             success = True
-                            break # အောင်မြင်ရင် နောက် Instance စမ်းစရာမလိုတော့ဘူး
-                    except:
-                        continue # Error တက်ရင် နောက် Server တစ်ခုနဲ့ ထပ်စမ်းမယ်
+                            break
+                    except: continue
                 
                 if not success:
-                    print(f"⚠️ Failed to fetch {user} from all instances.")
+                    print(f"⚠️ Could not reach @{user} (All instances failed)")
 
         print("😴 Waiting 10 mins...")
         await asyncio.sleep(600)
