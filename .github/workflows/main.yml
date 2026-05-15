@@ -1,4 +1,4 @@
-name: Red Packet Bot Ultimate
+name: Red Packet Bot Ultimate Fix
 
 on:
   workflow_dispatch:
@@ -10,30 +10,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-          
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1 libglib2.0-0
-          
       - name: Install Python Dependencies
         run: |
           pip install --upgrade pip
           pip install telethon requests gspread google-auth opencv-python-headless easyocr feedparser ntscraper yt-dlp
-          
-      - name: Create Cookie File
-        # စာကြောင်းအပိုတွေနဲ့ Format မပျက်အောင် Cat နဲ့ ဖန်တီးခိုင်းလိုက်ပါတယ်
+      
+      - name: Generate Fresh Guest Cookie
+        # YouTube ဆီကနေ Login မလိုတဲ့ Guest Cookie ကို Run တိုင်း အသစ်တောင်းခိုင်းတာပါ
         run: |
-          cat <<EOF > cookies.txt
-          ${{ secrets.YT_COOKIES }}
-          EOF
-
-      - name: Run Red Packet Bot
+          yt-dlp --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --print-cookies --url https://www.youtube.com/ > cookies.txt || echo "Guest Cookie Fetch Failed, using fallback"
+          
+      - name: Run Bot
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
@@ -41,6 +36,5 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           GOOGLE_SHEETS_JSON: ${{ secrets.GOOGLE_SHEETS_JSON }}
         run: python bot.py
