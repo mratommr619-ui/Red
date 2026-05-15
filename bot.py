@@ -14,17 +14,14 @@ from telethon.sessions import StringSession
 from google.oauth2.service_account import Credentials
 from ntscraper import Nitter
 
-# --- Global Config ---
+# --- Config ---
 START_TIME = time.time()
 MAX_RUN_TIME = 19800 
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
 READER = easyocr.Reader(['en'], gpu=False) 
 PROCESSED_VIDEOS = set()
-
-# အမှိုက်စာသားများ ဖယ်ထုတ်ရန် Blacklist
 BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW"]
 
-# Google Sheets Connect
 def get_sheet():
     try:
         creds_json = json.loads(os.getenv("GOOGLE_SHEETS_JSON"))
@@ -34,28 +31,29 @@ def get_sheet():
         return gc.open_by_url("https://docs.google.com/spreadsheets/d/1ZDHya5Gep3kvVyQqgdRlJIgquP7pYZv9ZSW7hV2YTyE/edit").sheet1
     except: return None
 
-# Binance Code Filter (ဂဏန်းပါမှယူမည်)
 def find_binance_code(text):
     if not text: return []
     found = re.findall(r'\b[A-Z0-9]{8}\b', text.upper())
     return [c for c in found if c not in BLACKLIST and any(char.isdigit() for char in c)]
 
-# Video Content OCR Scan (YouTube Block ကျော်ဖြတ်ရန် Fix ပါဝင်သည်)
 async def scan_video_content(video_url):
-    print(f"📥 Scanning Video: {video_url}")
+    print(f"📥 Scanning: {video_url}")
     video_file = "temp_video.mp4"
     codes_found = set()
     
-    # YouTube Bot Detection ကျော်ဖြတ်ရန် Android Client ပုံစံ ဟန်ဆောင်ခြင်း
+    # YouTube က Bot မှန်းမသိအောင် အပြင်းထန်ဆုံး Bypass Flags များ
     ydl_opts = {
         'format': 'worst', 
         'outtmpl': video_file, 
         'quiet': True, 
         'no_warnings': True,
+        'cookiefile': 'cookies.txt',
+        'nocheckcertificate': True,
+        'ignoreerrors': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios'],
-                'skip': ['dash', 'hls']
+                'player_client': ['android', 'web'],
+                'player_skip': ['web_safari_mac']
             }
         }
     }
@@ -64,26 +62,26 @@ async def scan_video_content(video_url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
         
-        if not os.path.exists(video_file): return codes_found
+        if not os.path.exists(video_file):
+            print("❌ Download failed even with cookies.")
+            return codes_found
 
         cap = cv2.VideoCapture(video_file)
-        fps = cap.get(cv2.CAP_PROP_FPS)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 24
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        interval = int(fps * 5) # ၅ စက္ကန့်ခြားတစ်ခါ ဖတ်မည်
+        interval = int(fps * 5)
         
         for frame_no in range(0, total_frames, interval):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
             success, frame = cap.read()
             if not success: break
-            
-            # OCR ဖတ်ခြင်း
             results = READER.readtext(frame)
             for (_, text, _) in results:
                 for c in find_binance_code(text):
                     codes_found.add(c)
         cap.release()
     except Exception as e:
-        print(f"⚠️ YouTube Scan Error (Blocked or Private): {e}")
+        print(f"⚠️ Scan Error: {e}")
     finally:
         if os.path.exists(video_file): os.remove(video_file)
             
@@ -102,26 +100,8 @@ async def main():
 
     await user_client.start()
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Version 3.1: Video OCR + X + TG Monitoring Started!")
+    print("🚀 Bot v3.3 (Ultimate Bypass) Started!")
 
-    # --- Telegram Monitoring (Private/Public) ---
-    @user_client.on(events.NewMessage())
-    async def handler(event):
-        try:
-            sheet = get_sheet()
-            if not sheet: return
-            records = sheet.get_all_records()
-            tg_list = [r['Link'].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
-                       for r in records if r['Type'].upper() == 'TG']
-            chat = await event.get_chat()
-            username = getattr(chat, 'username', None)
-            if username in tg_list or str(event.chat_id) in tg_list:
-                codes = find_binance_code(event.raw_text)
-                for c in set(codes):
-                    await bot_client.send_message(MY_CHAT_ID, f"🎁 **TG Code:** `{c}`\n🔗 From: @{username if username else 'Channel'}")
-        except: pass
-
-    # --- Main Scraper Loop ---
     while True:
         if time.time() - START_TIME > MAX_RUN_TIME:
             trigger_restart(); break
@@ -130,7 +110,7 @@ async def main():
         if not sheet: await asyncio.sleep(60); continue
         records = sheet.get_all_records()
 
-        # ၁။ YouTube Scan (Video Content OCR)
+        # YouTube Section
         yt_links = [r['Link'] for r in records if r['Type'].upper() == 'YT']
         for rss_url in yt_links:
             try:
@@ -142,12 +122,12 @@ async def main():
                     found_codes = await scan_video_content(entry.link)
                     if found_codes:
                         for c in found_codes:
-                            await bot_client.send_message(MY_CHAT_ID, f"🎁 **Inside Video:** `{c}`\n🔗 {entry.link}")
+                            await bot_client.send_message(MY_CHAT_ID, f"🎁 **Found Inside Video:** `{c}`\n🔗 {entry.link}")
                     
                     PROCESSED_VIDEOS.add(v_id)
             except: pass
 
-        # ၂။ X (Twitter) Scan
+        # X Section
         x_links = [r['Link'] for r in records if r['Type'].upper() == 'X']
         if x_links:
             scraper = Nitter()
@@ -156,12 +136,11 @@ async def main():
                     user = link.strip().split('/')[-1]
                     tweets = scraper.get_tweets(user, mode='user', number=2)
                     for t in tweets['tweets']:
-                        codes = find_binance_code(t['text'])
-                        for c in set(codes):
+                        for c in find_binance_code(t['text']):
                             await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: {user}")
                 except: pass
 
-        await asyncio.sleep(600) # ၁၀ မိနစ်တစ်ခါ စစ်မည်
+        await asyncio.sleep(600)
 
 if __name__ == "__main__":
     asyncio.run(main())
