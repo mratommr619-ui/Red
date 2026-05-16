@@ -3,8 +3,8 @@ import os
 import re
 import json
 import gspread
+import requests
 import asyncio
-import easyocr
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from google.oauth2.service_account import Credentials
@@ -12,15 +12,13 @@ from twikit import Client
 
 # --- Config ---
 START_TIME = time.time()
-MAX_RUN_TIME = 19800 
+MAX_RUN_TIME = 19800 # ၅ နာရီခွဲ (ဒီအချိန်ပြည့်ရင် Auto နိုးမယ်)
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
-READER = easyocr.Reader(['en'], gpu=False) 
 SENT_CODES = set()
 BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW"]
 
 def find_binance_code(text):
     if not text: return []
-    # ၈ လုံးကနေ ၁၀ လုံးကြား code တွေကို ရှာမယ်
     found = re.findall(r'\b[A-Z0-9]{8,10}\b', text.upper())
     return [c for c in found if c not in BLACKLIST]
 
@@ -33,20 +31,22 @@ def get_sheet():
         return gc.open_by_url("https://docs.google.com/spreadsheets/d/1ZDHya5Gep3kvVyQqgdRlJIgquP7pYZv9ZSW7hV2YTyE/edit").sheet1
     except: return None
 
-async def process_tg_message(event, bot_client, label):
-    codes = find_binance_code(event.raw_text)
-    if event.photo:
-        try:
-            photo = await event.download_media("tg_img.jpg")
-            for (_, text, _) in READER.readtext(photo):
-                codes.extend(find_binance_code(text))
-            if os.path.exists(photo): os.remove(photo)
-        except: pass
-    for c in set(codes):
-        if c not in SENT_CODES:
-            await bot_client.send_message(MY_CHAT_ID, f"🎁 **TG Code:** `{c}`\n🔗 From: @{label}")
-            SENT_CODES.add(c)
-            print(f"✨ Found on TG: {c}")
+# --- GitHub ကို ကိုယ်တိုင် ပြန်နှိုးခိုင်းသည့် စနစ် ---
+def trigger_restart():
+    try:
+        repo = os.getenv('GITHUB_REPOSITORY')
+        url = f"https://api.github.com/repos/{repo}/dispatches"
+        headers = {
+            "Authorization": f"token {os.getenv('GH_PAT')}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        response = requests.post(url, headers=headers, json={"event_type": "restart_bot"})
+        if response.status_code == 204:
+            print("🔄 Auto-Wakeup Signal Sent Successfully!")
+        else:
+            print(f"⚠️ Wakeup Signal Failed: {response.status_code}")
+    except Exception as e:
+        print(f"⚠️ Trigger Error: {e}")
 
 async def main():
     # --- X Client Setup ---
@@ -56,9 +56,9 @@ async def main():
             'auth_token': os.getenv("X_AUTH_TOKEN"),
             'ct0': os.getenv("X_CT0")
         })
-        print("✅ X Cookie Loaded Successfully!")
-    except Exception as e:
-        print(f"❌ X Cookie Error: {e}")
+        print("✅ X Cookie Injection Done!")
+    except Exception as ce: 
+        print(f"❌ X Cookie Init Error: {ce}")
 
     user_client = TelegramClient(StringSession(os.getenv("TG_STRING_SESSION")), 
                                  int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
@@ -66,9 +66,8 @@ async def main():
 
     await user_client.start()
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v5.1 (X Direct Edition) is Online!")
+    print("🚀 Bot v5.4 (Continuous Run Mode) is Online!")
 
-    # Google Sheet data ယူခြင်း
     sheet = get_sheet()
     tg_list = []
     if sheet:
@@ -76,44 +75,55 @@ async def main():
         tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
                    for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
-    # Telegram စောင့်ကြည့်ခြင်း
+    # Telegram Monitor
     @user_client.on(events.NewMessage())
     async def handler(event):
         try:
             chat = await event.get_chat()
             username = getattr(chat, 'username', None)
             if username in tg_list:
-                await process_tg_message(event, bot_client, username)
+                codes = find_binance_code(event.raw_text)
+                for c in set(codes):
+                    if c not in SENT_CODES:
+                        await bot_client.send_message(MY_CHAT_ID, f"🎁 **TG Code:** `{c}`\n🔗 From: @{username}")
+                        SENT_CODES.add(c)
         except: pass
 
-    # X Monitoring Loop
+    # Loop Monitoring
     while True:
-        if time.time() - START_TIME > MAX_RUN_TIME: break
+        # ၅ နာရီခွဲပြည့်ရင် Loop ထဲကထွက်ပြီး ကိုယ်တိုင် ပြန်နှိုးမယ်
+        if time.time() - START_TIME > MAX_RUN_TIME:
+            print("⏰ Time limit reached. Triggering Auto-Wakeup...")
+            trigger_restart()
+            break
         
         sheet = get_sheet()
-        if not sheet: await asyncio.sleep(60); continue
+        if not sheet: 
+            await asyncio.sleep(60); continue
+            
         all_values = sheet.get_all_values()
         x_links = [row[1] for row in all_values if len(row) >= 2 and row[0].upper() == 'X']
+        tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
+                   for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
         if x_links:
             print(f"🐦 Checking {len(x_links)} X Accounts...")
             for link in x_links:
+                username = link.strip().split('/')[-1].split('?')[0]
                 try:
-                    username = link.strip().split('/')[-1].split('?')[0]
                     user = await x_client.get_user_by_screen_name(username)
                     tweets = await user.get_tweets('Tweets', count=3)
-                    
                     for t in tweets:
-                        codes = find_binance_code(t.text)
-                        for c in set(codes):
+                        for c in set(find_binance_code(t.text)):
                             if c not in SENT_CODES:
                                 await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{username}")
                                 SENT_CODES.add(c)
-                                print(f"✨ Found on X: {c}")
+                                print(f"✨ Found Code on X: {c}")
                 except Exception as e:
-                    print(f"⚠️ Error checking @{username}: {e}")
+                    print(f"⚠️ Error with @{username}: {e}")
+                    await asyncio.sleep(5)
 
-        print("😴 Waiting 5 mins...")
+        print("😴 Waiting 5 mins for next scan...")
         await asyncio.sleep(300)
 
 if __name__ == "__main__":
