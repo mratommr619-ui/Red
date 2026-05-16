@@ -8,7 +8,6 @@ import asyncio
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from google.oauth2.service_account import Credentials
-from twikit import Client
 
 # --- Config ---
 START_TIME = time.time()
@@ -47,31 +46,38 @@ def trigger_restart():
     except Exception as e:
         print(f"⚠️ Trigger Error: {e}")
 
-async def main():
-    # --- X Client Setup ---
-    x_client = Client('en-US')
-    try:
-        x_client.set_cookies({
-            'auth_token': os.getenv("X_AUTH_TOKEN"),
-            'ct0': os.getenv("X_CT0")
-        })
-        print("✅ X Cookie Loaded!")
-    except Exception as ce: 
-        print(f"❌ X Cookie Error: {ce}")
+# --- Twitter API Break များကို ကျော်ဖြတ်ရန် Official Syndication Bypass ---
+def fetch_tweets_via_syndication(username):
+    urls = [
+        f"https://cdn.syndication.twimg.com/timeline/profile?screen_name={username}",
+        f"https://syndication.twitter.com/srv/timeline-profile/screen-name={username}"
+    ]
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+    }
+    for url in urls:
+        try:
+            res = requests.get(url, headers=headers, timeout=15)
+            if res.status_code == 200:
+                return res.text # JSON စာသားတစ်ခုလုံးကို အစိမ်းလိုက် ပြန်ပို့မည်
+        except:
+            continue
+    return ""
 
+async def main():
     user_client = TelegramClient(StringSession(os.getenv("TG_STRING_SESSION")), 
                                  int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
     bot_client = TelegramClient('bot', int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
 
-    # --- Safe Telegram Connection (ဟန်းခြင်းမှ ကာကွယ်ရန်) ---
     print("🔌 Connecting to Telegram...")
     await user_client.connect()
     if not await user_client.is_user_authorized():
-        print("❌ Telegram Session Expired! Please regenerate TG_STRING_SESSION.")
+        print("❌ Telegram Session Expired!")
         return
 
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v5.5 (Strict Live Mode) is Online!")
+    print("🚀 Bot v5.6 (Absolute X Bypass) is Online!")
 
     sheet = get_sheet()
     tg_list = []
@@ -80,6 +86,7 @@ async def main():
         tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
                    for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
+    # Telegram Live Monitor
     @user_client.on(events.NewMessage())
     async def handler(event):
         try:
@@ -94,7 +101,7 @@ async def main():
                         print(f"✨ Found Code on TG: {c}")
         except: pass
 
-    # Loop Monitoring
+    # X Loop Monitoring
     while True:
         if time.time() - START_TIME > MAX_RUN_TIME:
             print("⏰ Time limit reached. Re-booting...")
@@ -111,22 +118,22 @@ async def main():
                    for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
         if x_links:
-            print(f"🐦 Checking {len(x_links)} X Accounts...")
+            print(f"🐦 Checking {len(x_links)} X Accounts via Syndication Bypass...")
             for link in x_links:
                 username = link.strip().split('/')[-1].split('?')[0]
                 try:
-                    user = await x_client.get_user_by_screen_name(username)
-                    tweets = await user.get_tweets('Tweets', count=3)
-                    for t in tweets:
-                        print(f"📖 Reading @{username}: {t.text[:30]}...")
-                        for c in set(find_binance_code(t.text)):
+                    raw_data = fetch_tweets_via_syndication(username)
+                    if raw_data:
+                        # JSON Format ဘယ်လိုပဲပြောင်းပြောင်း စာသားတစ်ခုလုံးထဲကနေ ဆွဲထုတ်သည့်အတွက် လုံးဝ စိတ်ချရပါသည်
+                        codes = find_binance_code(raw_data)
+                        for c in set(codes):
                             if c not in SENT_CODES:
                                 await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{username}")
                                 SENT_CODES.add(c)
                                 print(f"✨ Found Code on X: {c}")
                 except Exception as e:
                     print(f"⚠️ Error with @{username}: {e}")
-                    await asyncio.sleep(5)
+                await asyncio.sleep(3)
 
         print("😴 Waiting 5 mins...")
         await asyncio.sleep(300)
