@@ -14,7 +14,7 @@ START_TIME = time.time()
 MAX_RUN_TIME = 19800 
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
 SENT_CODES = set()
-BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW"]
+BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW", "TWITTER", "TIMELINE", "FOLLOW"]
 
 def find_binance_code(text):
     if not text: return []
@@ -46,23 +46,22 @@ def trigger_restart():
     except Exception as e:
         print(f"⚠️ Trigger Error: {e}")
 
-# --- Twitter API Break များကို ကျော်ဖြတ်ရန် Official Syndication Bypass ---
+# --- X Syndication Fetcher with Debug Log ---
 def fetch_tweets_via_syndication(username):
-    urls = [
-        f"https://cdn.syndication.twimg.com/timeline/profile?screen_name={username}",
-        f"https://syndication.twitter.com/srv/timeline-profile/screen-name={username}"
-    ]
+    url = f"https://syndication.twitter.com/srv/timeline-profile/screen-name/{username}"
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
     }
-    for url in urls:
-        try:
-            res = requests.get(url, headers=headers, timeout=15)
-            if res.status_code == 200:
-                return res.text # JSON စာသားတစ်ခုလုံးကို အစိမ်းလိုက် ပြန်ပို့မည်
-        except:
-            continue
+    try:
+        res = requests.get(url, headers=headers, timeout=15)
+        # --- ဒါက ဘာဖြစ်နေလဲဆိုတာ ပြပေးမယ့် Log ပါ ---
+        print(f"📡 @{username} -> HTTP Status: {res.status_code} | Data Size: {len(res.text)} bytes")
+        if res.status_code == 200:
+            return res.text
+    except Exception as e:
+        print(f"❌ Connection Failed for @{username}: {e}")
     return ""
 
 async def main():
@@ -77,7 +76,7 @@ async def main():
         return
 
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v5.6 (Absolute X Bypass) is Online!")
+    print("🚀 Bot v5.7 (X Debugger Mode) is Online!")
 
     sheet = get_sheet()
     tg_list = []
@@ -86,7 +85,7 @@ async def main():
         tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
                    for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
-    # Telegram Live Monitor
+    # Telegram Monitor
     @user_client.on(events.NewMessage())
     async def handler(event):
         try:
@@ -118,21 +117,17 @@ async def main():
                    for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
         if x_links:
-            print(f"🐦 Checking {len(x_links)} X Accounts via Syndication Bypass...")
+            print(f"🐦 Checking {len(x_links)} X Accounts...")
             for link in x_links:
                 username = link.strip().split('/')[-1].split('?')[0]
-                try:
-                    raw_data = fetch_tweets_via_syndication(username)
-                    if raw_data:
-                        # JSON Format ဘယ်လိုပဲပြောင်းပြောင်း စာသားတစ်ခုလုံးထဲကနေ ဆွဲထုတ်သည့်အတွက် လုံးဝ စိတ်ချရပါသည်
-                        codes = find_binance_code(raw_data)
-                        for c in set(codes):
-                            if c not in SENT_CODES:
-                                await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{username}")
-                                SENT_CODES.add(c)
-                                print(f"✨ Found Code on X: {c}")
-                except Exception as e:
-                    print(f"⚠️ Error with @{username}: {e}")
+                raw_data = fetch_tweets_via_syndication(username)
+                if raw_data:
+                    codes = find_binance_code(raw_data)
+                    for c in set(codes):
+                        if c not in SENT_CODES:
+                            await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{username}")
+                            SENT_CODES.add(c)
+                            print(f"🎯 Successfully Caught on X: {c}")
                 await asyncio.sleep(3)
 
         print("😴 Waiting 5 mins...")
