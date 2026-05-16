@@ -1,4 +1,4 @@
-name: Red Packet Bot v5.5 (Strict Live)
+name: Red Packet Bot v5.6 (Ultimate Syndication)
 
 on:
   workflow_dispatch:
@@ -20,7 +20,7 @@ jobs:
         run: |
           sudo apt-get update
           pip install --upgrade pip
-          pip install --upgrade httpx httpcore twikit telethon requests gspread google-auth
+          pip install telethon requests gspread google-auth
           
       - name: Run Bot
         env:
@@ -30,9 +30,6 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
           GOOGLE_SHEETS_JSON: ${{ secrets.GOOGLE_SHEETS_JSON }}
-          X_AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
-          X_CT0: ${{ secrets.CT0 }}
           GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        # -u ထည့်လိုက်တဲ့အတွက် စာသားတွေ ဟန်းမနေဘဲ တန်းပေါ်လာပါလိမ့်မယ်
         run: python -u bot.py
