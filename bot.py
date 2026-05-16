@@ -21,13 +21,12 @@ def find_binance_code(text):
     found = re.findall(r'\b[A-Z0-9]{8,10}\b', text.upper())
     return [c for c in found if c not in BLACKLIST]
 
-def get_sheet():
+def get_spreadsheet_client():
     try:
         creds_json = json.loads(os.getenv("GOOGLE_SHEETS_JSON"))
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_json, scopes=scope)
-        gc = gspread.authorize(creds)
-        return gc.open_by_url("https://docs.google.com/spreadsheets/d/1ZDHya5Gep3kvVyQqgdRlJIgquP7pYZv9ZSW7hV2YTyE/edit").sheet1
+        return gspread.authorize(creds)
     except: return None
 
 def trigger_restart():
@@ -46,46 +45,53 @@ def trigger_restart():
     except Exception as e:
         print(f"⚠️ Trigger Error: {e}")
 
-# --- X Syndication Fetcher with Debug Log ---
 def fetch_tweets_via_syndication(username):
     url = f"https://syndication.twitter.com/srv/timeline-profile/screen-name/{username}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
     }
     try:
         res = requests.get(url, headers=headers, timeout=15)
-        # --- ဒါက ဘာဖြစ်နေလဲဆိုတာ ပြပေးမယ့် Log ပါ ---
-        print(f"📡 @{username} -> HTTP Status: {res.status_code} | Data Size: {len(res.text)} bytes")
-        if res.status_code == 200:
-            return res.text
-    except Exception as e:
-        print(f"❌ Connection Failed for @{username}: {e}")
+        if res.status_code == 200: return res.text
+    except: pass
     return ""
 
 async def main():
+    global SENT_CODES
+    gc = get_spreadsheet_client()
+    if not gc:
+        print("❌ Google Sheet Connection Failed!")
+        return
+        
+    doc = gc.open_by_url("https://docs.google.com/spreadsheets/d/1ZDHya5Gep3kvVyQqgdRlJIgquP7pYZv9ZSW7hV2YTyE/edit")
+    sheet1 = doc.sheet1
+    
+    try:
+        sent_sheet = doc.worksheet("Sent")
+        old_codes = sent_sheet.col_values(1)
+        SENT_CODES.update(old_codes)
+        print(f"💾 Loaded {len(old_codes)} codes from memory.")
+    except gspread.exceptions.WorksheetNotFound:
+        sent_sheet = doc.add_worksheet(title="Sent", rows="1000", cols="2")
+        print("📁 Created new 'Sent' worksheet.")
+    except Exception as e:
+        print(f"⚠️ Memory Load Error: {e}")
+
     user_client = TelegramClient(StringSession(os.getenv("TG_STRING_SESSION")), 
                                  int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
     bot_client = TelegramClient('bot', int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
 
     print("🔌 Connecting to Telegram...")
     await user_client.connect()
-    if not await user_client.is_user_authorized():
-        print("❌ Telegram Session Expired!")
-        return
-
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v5.7 (X Debugger Mode) is Online!")
+    print("🚀 Bot is Online (English Text Edition)!")
 
-    sheet = get_sheet()
-    tg_list = []
-    if sheet:
-        all_values = sheet.get_all_values()
-        tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
-                   for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
+    all_values = sheet1.get_all_values()
+    tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
+               for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
-    # Telegram Monitor
+    # --- Telegram Monitor ---
     @user_client.on(events.NewMessage())
     async def handler(event):
         try:
@@ -95,26 +101,33 @@ async def main():
                 codes = find_binance_code(event.raw_text)
                 for c in set(codes):
                     if c not in SENT_CODES:
-                        await bot_client.send_message(MY_CHAT_ID, f"🎁 **TG Code:** `{c}`\n🔗 From: @{username}")
+                        # English စာသားအလှအပ ပုံစံ ပြောင်းလဲထားခြင်း
+                        fancy_message = (
+                            "✨ **New Binance Red Packet Code Detected!** ✨\n\n"
+                            "Tap the code below to copy instantly:\n"
+                            f"👉 `{c}` 👈\n\n"
+                            "🎁 Good Luck! 🎁"
+                        )
+                        await bot_client.send_message(MY_CHAT_ID, fancy_message)
                         SENT_CODES.add(c)
-                        print(f"✨ Found Code on TG: {c}")
+                        sent_sheet.append_row([c])
+                        print(f"✨ Sent & Saved (TG): {c}")
         except: pass
 
-    # X Loop Monitoring
+    # --- X Loop Monitoring ---
     while True:
         if time.time() - START_TIME > MAX_RUN_TIME:
             print("⏰ Time limit reached. Re-booting...")
             trigger_restart()
             break
         
-        sheet = get_sheet()
-        if not sheet: 
+        try:
+            all_values = sheet1.get_all_values()
+            x_links = [row[1] for row in all_values if len(row) >= 2 and row[0].upper() == 'X']
+            tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
+                       for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
+        except:
             await asyncio.sleep(60); continue
-            
-        all_values = sheet.get_all_values()
-        x_links = [row[1] for row in all_values if len(row) >= 2 and row[0].upper() == 'X']
-        tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
-                   for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
         if x_links:
             print(f"🐦 Checking {len(x_links)} X Accounts...")
@@ -125,9 +138,17 @@ async def main():
                     codes = find_binance_code(raw_data)
                     for c in set(codes):
                         if c not in SENT_CODES:
-                            await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{username}")
+                            # English စာသားအလှအပ ပုံစံ ပြောင်းလဲထားခြင်း
+                            fancy_message = (
+                                "✨ **New Binance Red Packet Code Detected!** ✨\n\n"
+                                "Tap the code below to copy instantly:\n"
+                                f"👉 `{c}` 👈\n\n"
+                                "🎁 Good Luck! 🎁"
+                            )
+                            await bot_client.send_message(MY_CHAT_ID, fancy_message)
                             SENT_CODES.add(c)
-                            print(f"🎯 Successfully Caught on X: {c}")
+                            sent_sheet.append_row([c])
+                            print(f"🎯 Sent & Saved (X): {c}")
                 await asyncio.sleep(3)
 
         print("😴 Waiting 5 mins...")
