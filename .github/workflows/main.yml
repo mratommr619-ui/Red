@@ -1,4 +1,4 @@
-name: Red Packet Bot v5.4 (Auto-Wakeup)
+name: Red Packet Bot v5.5 (Strict Live)
 
 on:
   workflow_dispatch:
@@ -32,7 +32,7 @@ jobs:
           GOOGLE_SHEETS_JSON: ${{ secrets.GOOGLE_SHEETS_JSON }}
           X_AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
           X_CT0: ${{ secrets.CT0 }}
-          # အလိုအလျောက် ပြန်နိုးဖို့အတွက် ဒါတွေ လိုအပ်ပါတယ်
           GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python bot.py
+        # -u ထည့်လိုက်တဲ့အတွက် စာသားတွေ ဟန်းမနေဘဲ တန်းပေါ်လာပါလိမ့်မယ်
+        run: python -u bot.py
