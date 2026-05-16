@@ -12,7 +12,7 @@ from twikit import Client
 
 # --- Config ---
 START_TIME = time.time()
-MAX_RUN_TIME = 19800 # ၅ နာရီခွဲ (ဒီအချိန်ပြည့်ရင် Auto နိုးမယ်)
+MAX_RUN_TIME = 19800 
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
 SENT_CODES = set()
 BLACKLIST = ["GIVEAWAY", "GRAPHICS", "AIRDROPS", "BINANCE", "CHANNELS", "REGISTER", "DOWNLOAD", "DAILYNEW"]
@@ -31,7 +31,6 @@ def get_sheet():
         return gc.open_by_url("https://docs.google.com/spreadsheets/d/1ZDHya5Gep3kvVyQqgdRlJIgquP7pYZv9ZSW7hV2YTyE/edit").sheet1
     except: return None
 
-# --- GitHub ကို ကိုယ်တိုင် ပြန်နှိုးခိုင်းသည့် စနစ် ---
 def trigger_restart():
     try:
         repo = os.getenv('GITHUB_REPOSITORY')
@@ -42,7 +41,7 @@ def trigger_restart():
         }
         response = requests.post(url, headers=headers, json={"event_type": "restart_bot"})
         if response.status_code == 204:
-            print("🔄 Auto-Wakeup Signal Sent Successfully!")
+            print("🔄 Auto-Wakeup Signal Sent!")
         else:
             print(f"⚠️ Wakeup Signal Failed: {response.status_code}")
     except Exception as e:
@@ -56,17 +55,23 @@ async def main():
             'auth_token': os.getenv("X_AUTH_TOKEN"),
             'ct0': os.getenv("X_CT0")
         })
-        print("✅ X Cookie Injection Done!")
+        print("✅ X Cookie Loaded!")
     except Exception as ce: 
-        print(f"❌ X Cookie Init Error: {ce}")
+        print(f"❌ X Cookie Error: {ce}")
 
     user_client = TelegramClient(StringSession(os.getenv("TG_STRING_SESSION")), 
                                  int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
     bot_client = TelegramClient('bot', int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
 
-    await user_client.start()
+    # --- Safe Telegram Connection (ဟန်းခြင်းမှ ကာကွယ်ရန်) ---
+    print("🔌 Connecting to Telegram...")
+    await user_client.connect()
+    if not await user_client.is_user_authorized():
+        print("❌ Telegram Session Expired! Please regenerate TG_STRING_SESSION.")
+        return
+
     await bot_client.start(bot_token=os.getenv("BOT_TOKEN"))
-    print("🚀 Bot v5.4 (Continuous Run Mode) is Online!")
+    print("🚀 Bot v5.5 (Strict Live Mode) is Online!")
 
     sheet = get_sheet()
     tg_list = []
@@ -75,7 +80,6 @@ async def main():
         tg_list = [row[1].strip().replace('@', '').replace('https://t.me/', '').split('/')[-1] 
                    for row in all_values if len(row) >= 2 and row[0].upper() == 'TG']
 
-    # Telegram Monitor
     @user_client.on(events.NewMessage())
     async def handler(event):
         try:
@@ -87,13 +91,13 @@ async def main():
                     if c not in SENT_CODES:
                         await bot_client.send_message(MY_CHAT_ID, f"🎁 **TG Code:** `{c}`\n🔗 From: @{username}")
                         SENT_CODES.add(c)
+                        print(f"✨ Found Code on TG: {c}")
         except: pass
 
     # Loop Monitoring
     while True:
-        # ၅ နာရီခွဲပြည့်ရင် Loop ထဲကထွက်ပြီး ကိုယ်တိုင် ပြန်နှိုးမယ်
         if time.time() - START_TIME > MAX_RUN_TIME:
-            print("⏰ Time limit reached. Triggering Auto-Wakeup...")
+            print("⏰ Time limit reached. Re-booting...")
             trigger_restart()
             break
         
@@ -114,6 +118,7 @@ async def main():
                     user = await x_client.get_user_by_screen_name(username)
                     tweets = await user.get_tweets('Tweets', count=3)
                     for t in tweets:
+                        print(f"📖 Reading @{username}: {t.text[:30]}...")
                         for c in set(find_binance_code(t.text)):
                             if c not in SENT_CODES:
                                 await bot_client.send_message(MY_CHAT_ID, f"🐦 **X Code:** `{c}`\n👤 From: @{username}")
@@ -123,7 +128,7 @@ async def main():
                     print(f"⚠️ Error with @{username}: {e}")
                     await asyncio.sleep(5)
 
-        print("😴 Waiting 5 mins for next scan...")
+        print("😴 Waiting 5 mins...")
         await asyncio.sleep(300)
 
 if __name__ == "__main__":
